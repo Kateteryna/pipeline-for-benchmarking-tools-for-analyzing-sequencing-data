@@ -1,7 +1,7 @@
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             main_end.nf                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 // Define input and output directory parameters
 params.input_dir = 'raw_data'
-params.tools_dir = 'tools' 
+params.tools_dir = 'tools' //Container location
 params.sample_seed = 100
 params.sample_percentage = 100
 
@@ -61,7 +61,7 @@ process seqtk_process {
 
 process fastp_process {
   label 'fastp'
-  publishDir "results/fastp", mode: 'copy'
+  publishDir "results/fastp", mode: 'copy', overwrite: false
   tag "${trimParams}_${reads[0].getName()}"
   container "${params.tools_dir}/fastp.sif"
 
@@ -188,7 +188,7 @@ process fastp_process {
 process abyss_process {
     label 'abyss'
     container "${params.tools_dir}/abyss.sif"
-    publishDir 'scaffolds_abyss', mode: 'copy'
+    publishDir 'scaffolds_abyss', mode: 'copy', overwrite: false
     tag "${trimParams}"
     input:
     tuple val(trimParams), path(read1), path(read2)
@@ -220,7 +220,7 @@ process clover_process {
 
 
   input:
-    tuple val(trimParams), path(read1), path(read2)  
+    tuple val(trimParams), path(read1), path(read2)
 
 
   output:
@@ -244,7 +244,7 @@ process spades_process {
   label 'spades'
   tag "${trimParams}"
   container "${params.tools_dir}/spades.sif"
-  publishDir 'scaffolds_spades', mode: 'copy'
+  publishDir 'scaffolds_spades', mode: 'copy', overwrite: false
 
 
   input:
@@ -278,7 +278,7 @@ process align_reads {
   output:
     path "aligned_${assembly.simpleName}.bam", emit: bam_file
     path "aligned_${assembly.simpleName}.bam.bai", emit: index_file
- 
+
 
   script:
     """
@@ -292,11 +292,11 @@ process align_reads {
     echo "Alignment completed for ${assembly.simpleName}."
 
     echo "Sorting BAM file for ${assembly.simpleName}..."
-    samtools sort aligned_${assembly.simpleName}.bam -o aligned_${assembly.simpleName}.sorted.bam  # Sort BAM file
-    mv aligned_${assembly.simpleName}.sorted.bam aligned_${assembly.simpleName}.bam  # Replace with sorted BAM file
+    samtools sort aligned_${assembly.simpleName}.bam -o aligned_${assembly.simpleName}.sorted.bam  
+    mv aligned_${assembly.simpleName}.sorted.bam aligned_${assembly.simpleName}.bam  
 
     echo "Indexing BAM file for ${assembly.simpleName}..."
-    samtools index aligned_${assembly.simpleName}.bam  # Index the sorted BAM file
+    samtools index aligned_${assembly.simpleName}.bam  
 
     echo "BAM file for ${assembly.simpleName} is sorted and indexed."
     """
@@ -305,7 +305,7 @@ process align_reads {
 
 process pilon_process {
   label 'pilon'
-  container "${params.tools_dir}/pilon.sif" 
+  container "${params.tools_dir}/pilon.sif" // Singularity container path
   publishDir 'polished_assemblies', mode: 'copy'
 
   input:
@@ -362,7 +362,7 @@ process quast_process {
 process velvet_process {
   label 'velvet'
   container "${params.tools_dir}/velvet.sif"
-  publishDir 'scaffolds_velvet', mode: 'copy'
+  publishDir 'scaffolds_velvet', mode: 'copy', overwrite: false
 
   input:
     tuple val(trimParams), path(read1), path(read2)
@@ -410,8 +410,8 @@ workflow {
 
   spades_process(fastpCollectChannel)
     .collect()
-    .set { spadesOutputChannel }  
-  
+    .set { spadesOutputChannel }
+
 
   abyss_process(fastpCollectChannel)
     .collect()
@@ -425,14 +425,13 @@ workflow {
   .collect()
   .set { velvetOutputChannel }
 
-  
 
   alignedReadsInputChannel = spadesOutputChannel
     .concat( velvetOutputChannel)
     .concat(cloverOutputChannel)
     .concat(abyssOutputChannel)
-  
-  alignedReadsInputChannel.view { println "AlignedReadsInputChannel: $it" }
+
+  //alignedReadsInputChannel.view { println "AlignedReadsInputChannel: $it" }
 
 
   alignedReadsInputChannelTwo = alignedReadsInputChannel
@@ -445,12 +444,10 @@ workflow {
     tuple(assembly, read1, read2)
   }
 
-
   align_reads(alignedReadsInputChannelTwo)
    .set { aligned_spades_clover_abyss_bam }
 
 
-  
   pilon_process(alignedReadsInputChannel.flatten(), aligned_spades_clover_abyss_bam.bam_file)
     .set { polished_spades_clover_abyss_assemblies }
 
